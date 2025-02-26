@@ -3,135 +3,118 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GitHub Image Viewer</title>
+    <title>Image Viewer</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; }
+        select, button { margin: 10px; padding: 5px; }
+        img { max-width: 80%; height: auto; margin-top: 20px; border: 1px solid #ccc; padding: 10px; }
+    </style>
 </head>
 <body>
 
     <h2>Image Viewer</h2>
     
-    <!-- Dropdowns -->
-    <label for="excelDropdown">Excel File:</label>
-    <select id="excelDropdown">
-        <option>Loading...</option>
-    </select>
+    <label for="fileSelect">Excel File:</label>
+    <select id="fileSelect"><option>Loading...</option></select>
 
-    <label for="sheetDropdown">Sheet:</label>
-    <select id="sheetDropdown" disabled>
-        <option>Select Excel File First</option>
-    </select>
+    <label for="sheetSelect">Sheet:</label>
+    <select id="sheetSelect"><option>Select an Excel file first</option></select>
 
-    <label for="imageDropdown">Image:</label>
-    <select id="imageDropdown" disabled>
-        <option>Select Sheet First</option>
-    </select>
+    <label for="imageSelect">Image:</label>
+    <select id="imageSelect"><option>Select a sheet first</option></select>
 
-    <!-- Image Display -->
-    <div>
-        <img id="imageDisplay" src="" alt="Selected Image" style="max-width: 100%; display: none;">
-    </div>
+    <br>
+    <img id="displayImage" src="" alt="Selected Image">
 
     <script>
-        document.addEventListener("DOMContentLoaded", function () {
-            const repoURL = "https://api.github.com/repos/DRTALEXANDER/image-viewer/contents/images"; // Update with your repo
-            const excelDropdown = document.getElementById("excelDropdown");
-            const sheetDropdown = document.getElementById("sheetDropdown");
-            const imageDropdown = document.getElementById("imageDropdown");
-            const imageDisplay = document.getElementById("imageDisplay");
+        const repoURL = "https://api.github.com/repos/DRTALEXANDER/image-viewer/contents/";
 
-            fetch(repoURL)
-                .then(response => response.json())
-                .then(data => {
-                    let fileNames = data
-                        .filter(file => file.name.match(/\.(jpg|jpeg|png|gif)$/i))
-                        .map(file => file.name);
+        async function fetchImages() {
+            try {
+                const response = await fetch(repoURL);
+                const files = await response.json();
+                
+                // Filter only image files
+                const imageFiles = files.filter(file => file.name.match(/\.(jpg|jpeg|png|gif)$/i));
+                
+                if (imageFiles.length === 0) {
+                    document.getElementById("fileSelect").innerHTML = "<option>No images found</option>";
+                    return;
+                }
 
-                    if (fileNames.length === 0) {
-                        excelDropdown.innerHTML = "<option>No Images Found</option>";
-                        return;
-                    }
+                // Extract unique Excel file names from the image file names
+                const excelFiles = [...new Set(imageFiles.map(file => file.name.split('-')[0]))];
 
-                    let groupedFiles = {};
+                let fileSelect = document.getElementById("fileSelect");
+                fileSelect.innerHTML = "<option>Select a file</option>";
 
-                    fileNames.forEach(file => {
-                        const parts = file.split("-");
-                        if (parts.length < 4) return;
+                excelFiles.forEach(file => {
+                    let option = document.createElement("option");
+                    option.value = file;
+                    option.textContent = file;
+                    fileSelect.appendChild(option);
+                });
 
-                        let excelName = parts[0];
-                        let sheetName = parts[1];
-                        let number = parseInt(parts[2], 10);
-                        let imageName = parts.slice(3).join("-");
+                // Event listener for Excel file selection
+                fileSelect.addEventListener("change", function() {
+                    const selectedFile = this.value;
+                    const sheets = [...new Set(imageFiles
+                        .filter(file => file.name.startsWith(selectedFile + "-"))
+                        .map(file => file.name.split('-')[1]))];
 
-                        if (!groupedFiles[excelName]) groupedFiles[excelName] = {};
-                        if (!groupedFiles[excelName][sheetName]) groupedFiles[excelName][sheetName] = [];
+                    let sheetSelect = document.getElementById("sheetSelect");
+                    sheetSelect.innerHTML = "<option>Select a sheet</option>";
 
-                        groupedFiles[excelName][sheetName].push({ number, imageName, fullPath: file });
-                    });
-
-                    // Sort images by sequential number
-                    Object.keys(groupedFiles).forEach(excel => {
-                        Object.keys(groupedFiles[excel]).forEach(sheet => {
-                            groupedFiles[excel][sheet].sort((a, b) => a.number - b.number);
-                        });
-                    });
-
-                    // Populate Excel dropdown
-                    excelDropdown.innerHTML = '<option>Select a file</option>';
-                    Object.keys(groupedFiles).forEach(excel => {
+                    sheets.forEach(sheet => {
                         let option = document.createElement("option");
-                        option.value = excel;
-                        option.textContent = excel;
-                        excelDropdown.appendChild(option);
+                        option.value = sheet;
+                        option.textContent = sheet;
+                        sheetSelect.appendChild(option);
                     });
 
-                    // Event listener for Excel selection
-                    excelDropdown.addEventListener("change", function () {
-                        sheetDropdown.innerHTML = '<option>Select a sheet</option>';
-                        imageDropdown.innerHTML = '<option>Select Image</option>';
-                        imageDropdown.disabled = true;
+                    // Reset image selection
+                    document.getElementById("imageSelect").innerHTML = "<option>Select a sheet first</option>";
+                    document.getElementById("displayImage").src = "";
+                });
 
-                        let selectedExcel = this.value;
-                        if (!groupedFiles[selectedExcel]) return;
-
-                        Object.keys(groupedFiles[selectedExcel]).forEach(sheet => {
-                            let option = document.createElement("option");
-                            option.value = sheet;
-                            option.textContent = sheet;
-                            sheetDropdown.appendChild(option);
+                // Event listener for sheet selection
+                document.getElementById("sheetSelect").addEventListener("change", function() {
+                    const selectedFile = document.getElementById("fileSelect").value;
+                    const selectedSheet = this.value;
+                    
+                    const images = imageFiles
+                        .filter(file => file.name.startsWith(selectedFile + "-" + selectedSheet + "-"))
+                        .sort((a, b) => {
+                            let numA = parseInt(a.name.split('-')[2]);
+                            let numB = parseInt(b.name.split('-')[2]);
+                            return numA - numB;
                         });
 
-                        sheetDropdown.disabled = false;
+                    let imageSelect = document.getElementById("imageSelect");
+                    imageSelect.innerHTML = "<option>Select an image</option>";
+
+                    images.forEach(image => {
+                        let option = document.createElement("option");
+                        option.value = image.download_url;
+                        option.textContent = image.name.split('-')[3];
+                        imageSelect.appendChild(option);
                     });
 
-                    // Event listener for Sheet selection
-                    sheetDropdown.addEventListener("change", function () {
-                        imageDropdown.innerHTML = '<option>Select Image</option>';
-                        let selectedExcel = excelDropdown.value;
-                        let selectedSheet = this.value;
-                        if (!groupedFiles[selectedExcel][selectedSheet]) return;
+                    // Reset displayed image
+                    document.getElementById("displayImage").src = "";
+                });
 
-                        groupedFiles[selectedExcel][selectedSheet].forEach(img => {
-                            let option = document.createElement("option");
-                            option.value = img.fullPath;
-                            option.textContent = img.imageName;
-                            imageDropdown.appendChild(option);
-                        });
+                // Event listener for image selection
+                document.getElementById("imageSelect").addEventListener("change", function() {
+                    document.getElementById("displayImage").src = this.value;
+                });
 
-                        imageDropdown.disabled = false;
-                    });
+            } catch (error) {
+                console.error("Error fetching images:", error);
+            }
+        }
 
-                    // Event listener for Image selection
-                    imageDropdown.addEventListener("change", function () {
-                        let selectedImage = this.value;
-                        if (!selectedImage) return;
-
-                        let imageURL = `https://raw.githubusercontent.com/DRTALEXANDER/image-viewer/main/images/${selectedImage}`;
-                        imageDisplay.src = imageURL;
-                        imageDisplay.style.display = "block";
-                    });
-
-                })
-                .catch(error => console.error("Error fetching images:", error));
-        });
+        fetchImages();
     </script>
 
 </body>
