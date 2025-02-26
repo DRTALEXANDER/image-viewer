@@ -3,118 +3,135 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Image Viewer</title>
-    <style>
-        body { font-family: Arial, sans-serif; text-align: center; margin: 20px; }
-        img { max-width: 100%; height: auto; margin-top: 10px; }
-        select { margin: 5px; padding: 8px; }
-    </style>
+    <title>GitHub Image Viewer</title>
 </head>
 <body>
 
-    <h2>Select Image</h2>
+    <h2>Image Viewer</h2>
+    
+    <!-- Dropdowns -->
+    <label for="excelDropdown">Excel File:</label>
+    <select id="excelDropdown">
+        <option>Loading...</option>
+    </select>
 
-    <h3>Select File:</h3>
-    <select id="fileDropdown"><option>Loading...</option></select>
+    <label for="sheetDropdown">Sheet:</label>
+    <select id="sheetDropdown" disabled>
+        <option>Select Excel File First</option>
+    </select>
 
-    <h3>Select Sheet:</h3>
-    <select id="sheetDropdown"><option>Select a sheet</option></select>
+    <label for="imageDropdown">Image:</label>
+    <select id="imageDropdown" disabled>
+        <option>Select Sheet First</option>
+    </select>
 
-    <h3>Select Image:</h3>
-    <select id="imageDropdown"><option>Select an image</option></select>
-
-    <br><br>
-    <img id="imageDisplay" src="" alt="Selected Image">
+    <!-- Image Display -->
+    <div>
+        <img id="imageDisplay" src="" alt="Selected Image" style="max-width: 100%; display: none;">
+    </div>
 
     <script>
-        let imagesData = [];
-        const repoURL = "https://api.github.com/repos/DRTALEXANDER/image-viewer/contents/"; // Update this!
+        document.addEventListener("DOMContentLoaded", function () {
+            const repoURL = "https://api.github.com/repos/DRTALEXANDER/image-viewer/contents/images"; // Update with your repo
+            const excelDropdown = document.getElementById("excelDropdown");
+            const sheetDropdown = document.getElementById("sheetDropdown");
+            const imageDropdown = document.getElementById("imageDropdown");
+            const imageDisplay = document.getElementById("imageDisplay");
 
-        // Fetch file list from GitHub
-        async function fetchImageList() {
-            try {
-                const response = await fetch(repoURL); 
-                if (!response.ok) throw new Error("Failed to fetch images.");
-                
-                const text = await response.text();
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(text, "text/html");
-                
-                // Extract image filenames
-                imagesData = Array.from(doc.querySelectorAll("a"))
-                    .map(link => link.textContent)
-                    .filter(name => name.match(/.+-.+-.+-.+\.(png|jpg|jpeg)$/i));
+            fetch(repoURL)
+                .then(response => response.json())
+                .then(data => {
+                    let fileNames = data
+                        .filter(file => file.name.match(/\.(jpg|jpeg|png|gif)$/i))
+                        .map(file => file.name);
 
-                populateFileDropdown();
-            } catch (error) {
-                console.error("Error fetching image list:", error);
-            }
-        }
+                    if (fileNames.length === 0) {
+                        excelDropdown.innerHTML = "<option>No Images Found</option>";
+                        return;
+                    }
 
-        function populateFileDropdown() {
-            let fileDropdown = document.getElementById("fileDropdown");
-            fileDropdown.innerHTML = "<option>Select a file</option>";
+                    let groupedFiles = {};
 
-            let uniqueFiles = [...new Set(imagesData.map(f => f.split('-')[0]))];
-            uniqueFiles.forEach(file => {
-                let option = document.createElement("option");
-                option.value = file;
-                option.textContent = file;
-                fileDropdown.appendChild(option);
-            });
+                    fileNames.forEach(file => {
+                        const parts = file.split("-");
+                        if (parts.length < 4) return;
 
-            fileDropdown.addEventListener("change", populateSheetDropdown);
-        }
+                        let excelName = parts[0];
+                        let sheetName = parts[1];
+                        let number = parseInt(parts[2], 10);
+                        let imageName = parts.slice(3).join("-");
 
-        function populateSheetDropdown() {
-            let selectedFile = document.getElementById("fileDropdown").value;
-            let sheetDropdown = document.getElementById("sheetDropdown");
-            sheetDropdown.innerHTML = "<option>Select a sheet</option>";
+                        if (!groupedFiles[excelName]) groupedFiles[excelName] = {};
+                        if (!groupedFiles[excelName][sheetName]) groupedFiles[excelName][sheetName] = [];
 
-            let uniqueSheets = [...new Set(imagesData
-                .filter(f => f.startsWith(selectedFile))
-                .map(f => f.split('-')[1]))];
+                        groupedFiles[excelName][sheetName].push({ number, imageName, fullPath: file });
+                    });
 
-            uniqueSheets.forEach(sheet => {
-                let option = document.createElement("option");
-                option.value = sheet;
-                option.textContent = sheet;
-                sheetDropdown.appendChild(option);
-            });
+                    // Sort images by sequential number
+                    Object.keys(groupedFiles).forEach(excel => {
+                        Object.keys(groupedFiles[excel]).forEach(sheet => {
+                            groupedFiles[excel][sheet].sort((a, b) => a.number - b.number);
+                        });
+                    });
 
-            sheetDropdown.addEventListener("change", populateImageDropdown);
-        }
+                    // Populate Excel dropdown
+                    excelDropdown.innerHTML = '<option>Select a file</option>';
+                    Object.keys(groupedFiles).forEach(excel => {
+                        let option = document.createElement("option");
+                        option.value = excel;
+                        option.textContent = excel;
+                        excelDropdown.appendChild(option);
+                    });
 
-        function populateImageDropdown() {
-            let selectedFile = document.getElementById("fileDropdown").value;
-            let selectedSheet = document.getElementById("sheetDropdown").value;
-            let imageDropdown = document.getElementById("imageDropdown");
-            imageDropdown.innerHTML = "<option>Select an image</option>";
+                    // Event listener for Excel selection
+                    excelDropdown.addEventListener("change", function () {
+                        sheetDropdown.innerHTML = '<option>Select a sheet</option>';
+                        imageDropdown.innerHTML = '<option>Select Image</option>';
+                        imageDropdown.disabled = true;
 
-            let imageList = imagesData
-                .filter(f => f.startsWith(selectedFile + '-' + selectedSheet))
-                .sort((a, b) => parseInt(a.split('-')[2]) - parseInt(b.split('-')[2]));
+                        let selectedExcel = this.value;
+                        if (!groupedFiles[selectedExcel]) return;
 
-            imageList.forEach(image => {
-                let displayName = image.split('-').slice(3).join('-'); // Extract image name
-                let option = document.createElement("option");
-                option.value = image;
-                option.textContent = displayName;
-                imageDropdown.appendChild(option);
-            });
+                        Object.keys(groupedFiles[selectedExcel]).forEach(sheet => {
+                            let option = document.createElement("option");
+                            option.value = sheet;
+                            option.textContent = sheet;
+                            sheetDropdown.appendChild(option);
+                        });
 
-            imageDropdown.addEventListener("change", displayImage);
-        }
+                        sheetDropdown.disabled = false;
+                    });
 
-        function displayImage() {
-            let selectedImage = document.getElementById("imageDropdown").value;
-            if (selectedImage) {
-                document.getElementById("imageDisplay").src = repoURL + selectedImage;
-            }
-        }
+                    // Event listener for Sheet selection
+                    sheetDropdown.addEventListener("change", function () {
+                        imageDropdown.innerHTML = '<option>Select Image</option>';
+                        let selectedExcel = excelDropdown.value;
+                        let selectedSheet = this.value;
+                        if (!groupedFiles[selectedExcel][selectedSheet]) return;
 
-        // Load images from GitHub
-        fetchImageList();
+                        groupedFiles[selectedExcel][selectedSheet].forEach(img => {
+                            let option = document.createElement("option");
+                            option.value = img.fullPath;
+                            option.textContent = img.imageName;
+                            imageDropdown.appendChild(option);
+                        });
+
+                        imageDropdown.disabled = false;
+                    });
+
+                    // Event listener for Image selection
+                    imageDropdown.addEventListener("change", function () {
+                        let selectedImage = this.value;
+                        if (!selectedImage) return;
+
+                        let imageURL = `https://raw.githubusercontent.com/DRTALEXANDER/image-viewer/main/images/${selectedImage}`;
+                        imageDisplay.src = imageURL;
+                        imageDisplay.style.display = "block";
+                    });
+
+                })
+                .catch(error => console.error("Error fetching images:", error));
+        });
     </script>
 
 </body>
