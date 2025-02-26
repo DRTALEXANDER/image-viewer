@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Viewer</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin: 20px; }
+        img { max-width: 100%; height: auto; margin-top: 10px; }
+        select, button, input { margin: 5px; padding: 8px; }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+
+    <h2>Upload Images ZIP</h2>
+    <input type="file" id="zipInput" accept=".zip">
+    
+    <h3>Select File:</h3>
+    <select id="fileDropdown"><option>Select a file</option></select>
+
+    <h3>Select Sheet:</h3>
+    <select id="sheetDropdown"><option>Select a sheet</option></select>
+
+    <h3>Select Image:</h3>
+    <select id="imageDropdown"><option>Select an image</option></select>
+
+    <br><br>
+    <img id="imageDisplay" src="" alt="Selected Image">
+
+    <script>
+        let imagesData = {}; // Store extracted images
+
+        document.getElementById('zipInput').addEventListener('change', function (event) {
+            let file = event.target.files[0];
+            if (!file) return;
+
+            let zip = new JSZip();
+            zip.loadAsync(file).then(function (zipContents) {
+                imagesData = {}; // Reset stored images
+
+                // Read each image file
+                let filePromises = Object.keys(zipContents.files).map(filename => {
+                    return zipContents.files[filename].async("blob").then(blob => {
+                        let fileURL = URL.createObjectURL(blob);
+                        imagesData[filename] = fileURL;
+                    });
+                });
+
+                Promise.all(filePromises).then(() => {
+                    populateFileDropdown();
+                });
+            });
+        });
+
+        function populateFileDropdown() {
+            let fileDropdown = document.getElementById('fileDropdown');
+            fileDropdown.innerHTML = "<option>Select a file</option>";
+
+            let uniqueFiles = [...new Set(Object.keys(imagesData).map(f => f.split('-')[0]))];
+            uniqueFiles.forEach(file => {
+                let option = document.createElement('option');
+                option.value = file;
+                option.textContent = file;
+                fileDropdown.appendChild(option);
+            });
+
+            fileDropdown.addEventListener('change', populateSheetDropdown);
+        }
+
+        function populateSheetDropdown() {
+            let selectedFile = document.getElementById('fileDropdown').value;
+            let sheetDropdown = document.getElementById('sheetDropdown');
+            sheetDropdown.innerHTML = "<option>Select a sheet</option>";
+
+            let uniqueSheets = [...new Set(Object.keys(imagesData)
+                .filter(f => f.startsWith(selectedFile))
+                .map(f => f.split('-')[1]))];
+
+            uniqueSheets.forEach(sheet => {
+                let option = document.createElement('option');
+                option.value = sheet;
+                option.textContent = sheet;
+                sheetDropdown.appendChild(option);
+            });
+
+            sheetDropdown.addEventListener('change', populateImageDropdown);
+        }
+
+        function populateImageDropdown() {
+            let selectedFile = document.getElementById('fileDropdown').value;
+            let selectedSheet = document.getElementById('sheetDropdown').value;
+            let imageDropdown = document.getElementById('imageDropdown');
+            imageDropdown.innerHTML = "<option>Select an image</option>";
+
+            let imageList = Object.keys(imagesData)
+                .filter(f => f.startsWith(selectedFile + '-' + selectedSheet))
+                .sort((a, b) => parseInt(a.split('-')[2]) - parseInt(b.split('-')[2]));
+
+            imageList.forEach(image => {
+                let displayName = image.split('-').slice(3).join('-'); // Extract image name
+                let option = document.createElement('option');
+                option.value = image;
+                option.textContent = displayName;
+                imageDropdown.appendChild(option);
+            });
+
+            imageDropdown.addEventListener('change', displayImage);
+        }
+
+        function displayImage() {
+            let selectedImage = document.getElementById('imageDropdown').value;
+            document.getElementById('imageDisplay').src = imagesData[selectedImage] || "";
+        }
+    </script>
+
+</body>
+</html>
