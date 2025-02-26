@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Image Viewer</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <style>
         body { font-family: Arial, sans-serif; text-align: center; margin: 20px; }
         img { max-width: 100%; height: auto; margin-top: 10px; }
@@ -29,22 +28,28 @@
 
     <script>
         let imagesData = [];
-        let zipFileName = "images.zip"; // Name of the ZIP file in the same folder
-        let zipContents = null;
+        const repoURL = "https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME/main/"; // Update this!
 
-        // Load and extract ZIP
-        fetch(zipFileName)
-            .then(response => response.blob())
-            .then(JSZip.loadAsync)
-            .then(zip => {
-                zipContents = zip;
-                return Promise.all(Object.keys(zip.files).map(file => zip.files[file].async("string").then(() => file)));
-            })
-            .then(files => {
-                imagesData = files.filter(f => f.match(/.+-.+-.+-.+\.(png|jpg|jpeg)$/i)); // Match expected format
+        // Fetch file list from GitHub
+        async function fetchImageList() {
+            try {
+                const response = await fetch(repoURL); 
+                if (!response.ok) throw new Error("Failed to fetch images.");
+                
+                const text = await response.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(text, "text/html");
+                
+                // Extract image filenames
+                imagesData = Array.from(doc.querySelectorAll("a"))
+                    .map(link => link.textContent)
+                    .filter(name => name.match(/.+-.+-.+-.+\.(png|jpg|jpeg)$/i));
+
                 populateFileDropdown();
-            })
-            .catch(error => console.error("Error loading ZIP:", error));
+            } catch (error) {
+                console.error("Error fetching image list:", error);
+            }
+        }
 
         function populateFileDropdown() {
             let fileDropdown = document.getElementById("fileDropdown");
@@ -103,13 +108,13 @@
 
         function displayImage() {
             let selectedImage = document.getElementById("imageDropdown").value;
-            if (zipContents && selectedImage) {
-                zipContents.files[selectedImage].async("blob").then(blob => {
-                    let imgURL = URL.createObjectURL(blob);
-                    document.getElementById("imageDisplay").src = imgURL;
-                });
+            if (selectedImage) {
+                document.getElementById("imageDisplay").src = repoURL + selectedImage;
             }
         }
+
+        // Load images from GitHub
+        fetchImageList();
     </script>
 
 </body>
