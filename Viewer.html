@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Viewer with Search</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
+        select, button, input { margin: 10px; padding: 5px; }
+        img { max-width: 90%; height: auto; margin-top: 20px; }
+        #searchResults { list-style: none; padding: 0; max-height: 150px; overflow-y: auto; }
+        #searchResults li { padding: 5px; cursor: pointer; background: #f0f0f0; border-bottom: 1px solid #ddd; }
+        #searchResults li:hover { background: #ddd; }
+    </style>
+</head>
+<body>
+
+    <h2>Image Viewer</h2>
+
+    <input type="file" id="zipInput" accept=".zip">
+    <br><br>
+
+    <label for="fileDropdown">Topic:</label>
+    <select id="fileDropdown">
+        <option value="">-- Choose File --</option>
+    </select>
+
+    <label for="sheetDropdown">Subtopic:</label>
+    <select id="sheetDropdown">
+        <option value="">-- Choose Sheet --</option>
+    </select>
+
+    <label for="imageDropdown">Table/Image:</label>
+    <select id="imageDropdown">
+        <option value="">-- Choose Image --</option>
+    </select>
+
+    <br><br>
+
+    <input type="text" id="searchBar" placeholder="Search for an image...">
+    <ul id="searchResults"></ul>
+
+    <br><br>
+    <img id="displayImage" src="" alt="Selected Image">
+
+    <script>
+        let images = [];
+        let fileMap = {};
+        let imageList = [];
+
+        document.getElementById('zipInput').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                JSZip.loadAsync(event.target.result).then(zip => {
+                    images = [];
+                    fileMap = {};
+                    imageList = [];
+
+                    zip.forEach((relativePath, zipEntry) => {
+                        if (zipEntry.name.endsWith('.png')) {
+                            images.push(zipEntry);
+                            processFileName(zipEntry.name);
+                        }
+                    });
+
+                    populateFileDropdown();
+                });
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        function processFileName(filename) {
+            const parts = filename.split('-');
+            if (parts.length < 4) return;
+
+            const fileName = parts[0];
+            const sheetName = parts[1];
+            const imageNumber = parts[2];
+            const imageName = parts.slice(3).join('-');
+
+            if (!fileMap[fileName]) fileMap[fileName] = {};
+            if (!fileMap[fileName][sheetName]) fileMap[fileName][sheetName] = [];
+            fileMap[fileName][sheetName].push({ filename, imageNumber, imageName });
+
+            imageList.push({ filename, imageName });
+        }
+
+        function populateFileDropdown() {
+            const fileDropdown = document.getElementById('fileDropdown');
+            fileDropdown.innerHTML = '<option value="">-- Choose File --</option>';
+            Object.keys(fileMap).forEach(file => {
+                const option = document.createElement('option');
+                option.value = file;
+                option.textContent = file;
+                fileDropdown.appendChild(option);
+            });
+        }
+
+        document.getElementById('fileDropdown').addEventListener('change', function() {
+            const selectedFile = this.value;
+            const sheetDropdown = document.getElementById('sheetDropdown');
+            sheetDropdown.innerHTML = '<option value="">-- Choose Sheet --</option>';
+
+            if (selectedFile && fileMap[selectedFile]) {
+                Object.keys(fileMap[selectedFile]).forEach(sheet => {
+                    const option = document.createElement('option');
+                    option.value = sheet;
+                    option.textContent = sheet;
+                    sheetDropdown.appendChild(option);
+                });
+            }
+        });
+
+        document.getElementById('sheetDropdown').addEventListener('change', function() {
+            const selectedFile = document.getElementById('fileDropdown').value;
+            const selectedSheet = this.value;
+            const imageDropdown = document.getElementById('imageDropdown');
+            imageDropdown.innerHTML = '<option value="">-- Choose Image --</option>';
+
+            if (selectedFile && selectedSheet && fileMap[selectedFile][selectedSheet]) {
+                fileMap[selectedFile][selectedSheet]
+                    .sort((a, b) => a.imageNumber - b.imageNumber)
+                    .forEach(image => {
+                        const option = document.createElement('option');
+                        option.value = image.filename;
+                        option.textContent = image.imageName;
+                        imageDropdown.appendChild(option);
+                    });
+            }
+        });
+
+        document.getElementById('imageDropdown').addEventListener('change', function() {
+            const selectedFilename = this.value;
+            loadImage(selectedFilename);
+        });
+
+        function loadImage(filename) {
+            const zipFile = document.getElementById('zipInput').files[0];
+            if (!zipFile) return;
+
+            JSZip.loadAsync(zipFile).then(zip => {
+                zip.file(filename).async("base64").then(data => {
+                    document.getElementById('displayImage').src = "data:image/png;base64," + data;
+                });
+            });
+        }
+
+        // Search Bar Functionality
+        document.getElementById('searchBar').addEventListener('input', function() {
+            const searchTerm = this.value.toLowerCase();
+            const searchResults = document.getElementById('searchResults');
+            searchResults.innerHTML = '';
+
+            if (searchTerm.length === 0) return;
+
+            const filteredImages = imageList.filter(img => img.imageName.toLowerCase().includes(searchTerm));
+
+            filteredImages.forEach(img => {
+                const listItem = document.createElement('li');
+                listItem.textContent = img.imageName;
+                listItem.addEventListener('click', function() {
+                    document.getElementById('searchBar').value = img.imageName;
+                    searchResults.innerHTML = '';
+                    loadImage(img.filename);
+                });
+                searchResults.appendChild(listItem);
+            });
+        });
+    </script>
+
+</body>
+</html>
