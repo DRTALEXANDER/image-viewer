@@ -3,93 +3,89 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Image Viewer</title>
+    <title>Fellowship Notes</title>
     <style>
         body { font-family: Arial, sans-serif; text-align: center; }
-        select, button { margin: 10px; padding: 5px; }
+        select, input, button { margin: 10px; padding: 5px; display: block; width: 50%; margin-left: auto; margin-right: auto; }
         img { max-width: 80%; height: auto; margin-top: 20px; border: 1px solid #ccc; padding: 10px; }
+        .search-results { max-width: 50%; margin: auto; text-align: left; border: 1px solid #ccc; padding: 10px; display: none; background: white; }
+        .search-results div { padding: 5px; cursor: pointer; }
+        .search-results div:hover { background: #f0f0f0; }
     </style>
 </head>
 <body>
 
-    <h2>Image Viewer</h2>
+    <h2>Fellowship Notes</h2>
     
-    <label for="fileSelect">Excel File:</label>
+    <label for="fileSelect">Topic:</label>
     <select id="fileSelect"><option>Loading...</option></select>
 
-    <label for="sheetSelect">Sheet:</label>
-    <select id="sheetSelect"><option>Select an Excel file first</option></select>
+    <label for="sheetSelect">Sub-Topic:</label>
+    <select id="sheetSelect"><option>Select a topic first</option></select>
 
     <label for="imageSelect">Image:</label>
-    <select id="imageSelect"><option>Select a sheet first</option></select>
+    <select id="imageSelect"><option>Select a sub-topic first</option></select>
+    
+    <label for="searchBar">Search for an Image:</label>
+    <input type="text" id="searchBar" placeholder="Type to search images...">
+    <div id="searchResults" class="search-results"></div>
 
     <br>
     <img id="displayImage" src="" alt="Selected Image">
 
     <script>
         const repoURL = "https://api.github.com/repos/DRTALEXANDER/image-viewer/contents/";
+        let imageFiles = [];
 
         async function fetchImages() {
             try {
                 const response = await fetch(repoURL);
                 const files = await response.json();
                 
-                // Filter only image files
-                const imageFiles = files.filter(file => file.name.match(/\.(jpg|jpeg|png|gif)$/i));
+                imageFiles = files.filter(file => file.name.match(/\.(jpg|jpeg|png|gif)$/i));
                 
                 if (imageFiles.length === 0) {
                     document.getElementById("fileSelect").innerHTML = "<option>No images found</option>";
                     return;
                 }
 
-                // Extract unique Excel file names from the image file names
-                const excelFiles = [...new Set(imageFiles.map(file => file.name.split('-')[0]))];
-
+                const topics = [...new Set(imageFiles.map(file => file.name.split('-')[0]))];
                 let fileSelect = document.getElementById("fileSelect");
-                fileSelect.innerHTML = "<option>Select a file</option>";
+                fileSelect.innerHTML = "<option>Select a topic</option>";
 
-                excelFiles.forEach(file => {
+                topics.forEach(topic => {
                     let option = document.createElement("option");
-                    option.value = file;
-                    option.textContent = file;
+                    option.value = topic;
+                    option.textContent = topic;
                     fileSelect.appendChild(option);
                 });
 
-                // Event listener for Excel file selection
                 fileSelect.addEventListener("change", function() {
-                    const selectedFile = this.value;
-                    const sheets = [...new Set(imageFiles
-                        .filter(file => file.name.startsWith(selectedFile + "-"))
+                    const selectedTopic = this.value;
+                    const subTopics = [...new Set(imageFiles
+                        .filter(file => file.name.startsWith(selectedTopic + "-"))
                         .map(file => file.name.split('-')[1]))];
 
                     let sheetSelect = document.getElementById("sheetSelect");
-                    sheetSelect.innerHTML = "<option>Select a sheet</option>";
+                    sheetSelect.innerHTML = "<option>Select a sub-topic</option>";
 
-                    sheets.forEach(sheet => {
+                    subTopics.forEach(subTopic => {
                         let option = document.createElement("option");
-                        option.value = sheet;
-                        option.textContent = sheet;
+                        option.value = subTopic;
+                        option.textContent = subTopic;
                         sheetSelect.appendChild(option);
                     });
 
-                    // Reset image selection
-                    document.getElementById("imageSelect").innerHTML = "<option>Select a sheet first</option>";
+                    document.getElementById("imageSelect").innerHTML = "<option>Select a sub-topic first</option>";
                     document.getElementById("displayImage").src = "";
                 });
 
-                // Event listener for sheet selection
                 document.getElementById("sheetSelect").addEventListener("change", function() {
-                    const selectedFile = document.getElementById("fileSelect").value;
-                    const selectedSheet = this.value;
+                    const selectedTopic = document.getElementById("fileSelect").value;
+                    const selectedSubTopic = this.value;
                     
-                    const images = imageFiles
-                        .filter(file => file.name.startsWith(selectedFile + "-" + selectedSheet + "-"))
-                        .sort((a, b) => {
-                            let numA = parseInt(a.name.split('-')[2]);
-                            let numB = parseInt(b.name.split('-')[2]);
-                            return numA - numB;
-                        });
-
+                    const images = imageFiles.filter(file => file.name.startsWith(selectedTopic + "-" + selectedSubTopic + "-"));
+                    
                     let imageSelect = document.getElementById("imageSelect");
                     imageSelect.innerHTML = "<option>Select an image</option>";
 
@@ -100,15 +96,38 @@
                         imageSelect.appendChild(option);
                     });
 
-                    // Reset displayed image
                     document.getElementById("displayImage").src = "";
                 });
 
-                // Event listener for image selection
                 document.getElementById("imageSelect").addEventListener("change", function() {
                     document.getElementById("displayImage").src = this.value;
                 });
 
+                document.getElementById("searchBar").addEventListener("input", function() {
+                    const query = this.value.toLowerCase();
+                    const resultsDiv = document.getElementById("searchResults");
+                    resultsDiv.innerHTML = "";
+                    
+                    if (!query) {
+                        resultsDiv.style.display = "none";
+                        return;
+                    }
+                    
+                    const filteredImages = imageFiles.filter(file => file.name.toLowerCase().includes(query));
+                    
+                    filteredImages.forEach(image => {
+                        let resultDiv = document.createElement("div");
+                        resultDiv.textContent = image.name;
+                        resultDiv.onclick = () => {
+                            document.getElementById("displayImage").src = image.download_url;
+                            document.getElementById("searchBar").value = "";
+                            resultsDiv.style.display = "none";
+                        };
+                        resultsDiv.appendChild(resultDiv);
+                    });
+                    
+                    resultsDiv.style.display = filteredImages.length ? "block" : "none";
+                });
             } catch (error) {
                 console.error("Error fetching images:", error);
             }
@@ -116,6 +135,5 @@
 
         fetchImages();
     </script>
-
 </body>
 </html>
